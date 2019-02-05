@@ -39,6 +39,10 @@
 #include "mingw.mutex.h"
 #include "mingw.shared_mutex.h"
 
+#if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0501)
+#error To use the MinGW-std-threads library, you will need to define the macro _WIN32_WINNT to be 0x0501 (Windows XP) or higher.
+#endif
+
 namespace mingw_stdthread
 {
 #if defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS)
