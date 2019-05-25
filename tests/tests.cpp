@@ -152,17 +152,9 @@ void test_future ()
   thread t ([](promise<T> p_value, promise<T> p_exception, promise<T>, promise<T> p_late)
     {
       this_thread::sleep_for(std::chrono::seconds(1));
-      try {
-        throw std::runtime_error("Thrown during the thread.");
-      } catch (...) {
-        p_late.set_exception_at_thread_exit(std::current_exception());
-      }
+      p_late.set_exception_at_thread_exit(std::make_exception_ptr(std::runtime_error("Thrown during the thread.")));
       test_future_set_value(p_value);
-      try {
-        throw std::runtime_error("Things happened as expected.");
-      } catch (...) {
-        p_exception.set_exception(std::current_exception());
-      }
+      p_exception.set_exception(std::make_exception_ptr(std::runtime_error("Things happened as expected.")));
       this_thread::sleep_for(std::chrono::seconds(2));
     },
     std::move(promise_value),
@@ -350,7 +342,9 @@ int main()
         }
         catch(std::exception& e)
         {
+#if defined(__cpp_exceptions) && (__cpp_exceptions >= 199711l)
             printf("EXCEPTION in worker thread: %s\n", e.what());
+#endif
         }
     },
     TestMove("move test"), "test message", -20);
@@ -385,7 +379,9 @@ int main()
     }
     catch(std::exception& e)
     {
+#if defined(__cpp_exceptions) && (__cpp_exceptions >= 199711l)
         log("EXCEPTION in main thread: %s", e.what());
+#endif
     }
     once_flag of;
     call_once(of, test_call_once, 1, "test");

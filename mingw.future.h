@@ -171,7 +171,7 @@ struct FutureBase : public FutureStatic<true>
 
   void wait (std::unique_lock<mutex> & lock) const
   {
-#if !defined(NDEBUG)
+#if !defined(NDEBUG) && defined(__cpp_exceptions) && (__cpp_exceptions >= 199711l)
     if (!valid())
       throw future_error(future_errc::no_state);
 #endif
@@ -187,7 +187,7 @@ struct FutureBase : public FutureStatic<true>
   template<class Rep, class Period>
   future_status wait_for (std::chrono::duration<Rep,Period> const & dur) const
   {
-#if !defined(NDEBUG)
+#if !defined(NDEBUG) && defined(__cpp_exceptions) && (__cpp_exceptions >= 199711l)
     if (!valid())
       throw future_error(future_errc::no_state);
 #endif
@@ -472,13 +472,7 @@ class promise : mingw_stdthread::detail::FutureBase
   void check_abandon (void)
   {
     if (valid() && !(mState->mType.load(std::memory_order_relaxed) & kSetFlag))
-    {
-      try {
-        throw future_error(future_errc::broken_promise);
-      } catch (...) {
-        set_exception(std::current_exception());
-      }
-    }
+      set_exception(std::make_exception_ptr(future_error(future_errc::broken_promise)));
   }
 /// \bug Might throw more exceptions than specified by the standard...
 //  Need OS support for this...
