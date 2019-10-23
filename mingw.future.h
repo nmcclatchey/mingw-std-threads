@@ -28,6 +28,10 @@
 #include <memory>
 #include <functional>     //  For std::hash
 
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+#include <cstdlib>      //  For std::abort, if -fno-exceptions set.
+#endif
+
 #include "mingw.thread.h" //  Start new threads, and use invoke.
 
 //  Mutexes and condition variables are used explicitly.
@@ -175,7 +179,8 @@ struct FutureBase : public FutureStatic<true>
 
   void wait (std::unique_lock<mutex> & lock) const
   {
-#if !defined(NDEBUG)
+//  This exception is encouraged by, but not required by, the standard.
+#if !defined(NDEBUG) && !defined(MINGW_STDTHREAD_DISABLE_EXCEPTIONS)
     if (!valid())
       throw future_error(future_errc::no_state);
 #endif
@@ -191,7 +196,8 @@ struct FutureBase : public FutureStatic<true>
   template<class Rep, class Period>
   future_status wait_for (std::chrono::duration<Rep,Period> const & dur) const
   {
-#if !defined(NDEBUG)
+//  This exception is encouraged by, but not required by, the standard.
+#if !defined(NDEBUG) && !defined(MINGW_STDTHREAD_DISABLE_EXCEPTIONS)
     if (!valid())
       throw future_error(future_errc::no_state);
 #endif
@@ -383,8 +389,13 @@ class future : mingw_stdthread::detail::FutureBase
       return static_cast<state_type *>(mState)->mObject;
     else
     {
+//  This exception is encouraged by, but not required by, the standard.
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+      std::abort();
+#else
       assert(mState->mType.load(std::memory_order_relaxed) == (kException | kReadyFlag));
       std::rethrow_exception(static_cast<state_type *>(mState)->mException);
+#endif
     }
   }
 
@@ -468,9 +479,21 @@ class promise : mingw_stdthread::detail::FutureBase
   void check_before_set (void) const
   {
     if (!valid())
+    {
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+      std::abort();
+#else
       throw future_error(future_errc::no_state);
+#endif
+    }
     if (mState->mType.load(std::memory_order_relaxed) & kSetFlag)
+    {
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+      std::abort();
+#else
       throw future_error(future_errc::promise_already_satisfied);
+#endif
+    }
   }
 
   void check_abandon (void)
@@ -495,11 +518,17 @@ class promise : mingw_stdthread::detail::FutureBase
                                    FALSE, //  No need for this to be inherited.
                                    DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE);
     if (!success)
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+      std::abort();
+#else
       throw std::runtime_error("MinGW STD Threads library failed to make a promise ready after thread exit.");
+#endif
 
     mState->increment_references();
     bool handle_handled = false;
+#ifndef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
     try {
+#endif
       state_type * ptr = static_cast<state_type *>(mState);
       mingw_stdthread::thread watcher_thread ([ptr, thread_handle, &handle_handled](void)
         {
@@ -528,6 +557,7 @@ class promise : mingw_stdthread::detail::FutureBase
           });
       }
       watcher_thread.detach();
+#ifndef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
     }
     catch (...)
     {
@@ -537,15 +567,24 @@ class promise : mingw_stdthread::detail::FutureBase
       if (!handle_handled)
         CloseHandle(thread_handle);
     }
+#endif
   }
 
   template<class U>
   future<U> make_future (void)
   {
     if (!valid())
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+      std::abort();
+#else
       throw future_error(future_errc::no_state);
+#endif
     if (mRetrieved)
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+      std::abort();
+#else
       throw future_error(future_errc::future_already_retrieved);
+#endif
     mState->increment_references();
     mRetrieved = true;
     return future<U>(static_cast<state_type *>(mState));
@@ -929,11 +968,15 @@ struct StorageHelper
   template<class Func, class ... Args>
   static void store_deferred (FutureState<Ret> * state_ptr, Func && func, Args&&... args)
   {
+#ifndef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
     try {
+#endif
       state_ptr->set_value(invoke(std::forward<Func>(func), std::forward<Args>(args)...));
+#ifndef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
     } catch (...) {
       state_ptr->set_exception(std::current_exception());
     }
+#endif
   }
   template<class Func, class ... Args>
   static void store (FutureState<Ret> * state_ptr, Func && func, Args&&... args)
@@ -952,13 +995,17 @@ struct StorageHelper<Ref&>
   template<class Func, class ... Args>
   static void store_deferred (FutureState<void*> * state_ptr, Func && func, Args&&... args)
   {
+#ifndef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
     try {
+#endif
       typedef typename std::remove_cv<Ref>::type Ref_non_cv;
       Ref & rf = invoke(std::forward<Func>(func), std::forward<Args>(args)...);
       state_ptr->set_value(const_cast<Ref_non_cv *>(std::addressof(rf)));
+#ifndef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
     } catch (...) {
       state_ptr->set_exception(std::current_exception());
     }
+#endif
   }
   template<class Func, class ... Args>
   static void store (FutureState<void*> * state_ptr, Func && func, Args&&... args)
@@ -977,12 +1024,16 @@ struct StorageHelper<void>
   template<class Func, class ... Args>
   static void store_deferred (FutureState<Empty> * state_ptr, Func && func, Args&&... args)
   {
+#ifndef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
     try {
+#endif
       invoke(std::forward<Func>(func), std::forward<Args>(args)...);
       state_ptr->set_value(Empty{});
+#ifndef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
     } catch (...) {
       state_ptr->set_exception(std::current_exception());
     }
+#endif
   }
   template<class Func, class ... Args>
   static void store (FutureState<Empty> * state_ptr, Func && func, Args&&... args)

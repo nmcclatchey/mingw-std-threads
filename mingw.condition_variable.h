@@ -31,6 +31,10 @@
 #include <chrono>
 #include <system_error>
 
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+#include <cstdlib>      //  For std::abort, if -fno-exceptions set.
+#endif
+
 #include <sdkddkver.h>  //  Detect Windows version.
 #if (WINVER < _WIN32_WINNT_VISTA)
 #include <atomic>
@@ -78,12 +82,20 @@ public:
         :   mSemaphore(CreateSemaphoreA(NULL, 0, 0xFFFF, NULL))
     {
         if (mSemaphore == NULL)
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+            std::abort();
+#else
             throw std::system_error(GetLastError(), std::generic_category());
+#endif
         mWakeEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
         if (mWakeEvent == NULL)
         {
             CloseHandle(mSemaphore);
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+            std::abort();
+#else
             throw std::system_error(GetLastError(), std::generic_category());
+#endif
         }
     }
     ~condition_variable_any()
@@ -122,8 +134,12 @@ private:
 //
         else
         {
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+            std::abort();
+#else
             using namespace std;
             throw system_error(make_error_code(errc::protocol_error));
+#endif
         }
     }
 public:

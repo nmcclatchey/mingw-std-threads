@@ -42,6 +42,9 @@
 #if STDMUTEX_RECURSION_CHECKS || !defined(NDEBUG)
 #include <cstdio>
 #endif
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+#include <cstdlib>      //  For std::abort, if -fno-exceptions set.
+#endif
 
 
 #include <sdkddkver.h>  //  Detect Windows version.
@@ -125,7 +128,11 @@ struct _OwnerThread
         fprintf(stderr, "FATAL: Recursive locking of non-recursive mutex\
  detected. Throwing system exception\n");
         fflush(stderr);
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+        std::abort();
+#else
         throw system_error(make_error_code(errc::resource_deadlock_would_occur));
+#endif
     }
     DWORD checkOwnerBeforeLock() const
     {
@@ -349,13 +356,21 @@ public:
 #endif
         if ((ret != kWaitObject0) && (ret != kWaitAbandoned))
         {
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+            std::abort();
+#else
             throw std::system_error(GetLastError(), std::system_category());
+#endif
         }
     }
     void unlock()
     {
         if (!ReleaseMutex(mHandle))
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+            std::abort();
+#else
             throw std::system_error(GetLastError(), std::system_category());
+#endif
     }
     bool try_lock()
     {

@@ -49,6 +49,9 @@
 #ifndef NDEBUG
 #include <cstdio>
 #endif
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+#include <cstdlib>      //  For std::abort, if -fno-exceptions set.
+#endif
 
 #if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0501)
 #error To use the MinGW-std-threads library, you will need to define the macro _WIN32_WINNT to be 0x0501 (Windows XP) or higher.
@@ -178,7 +181,7 @@ public:
     {
         using ArgSequence = typename detail::GenIntSeq<sizeof...(Args)>::type;
         using Call = detail::ThreadFuncCall<Func, ArgSequence, Args...>;
-        auto call = new Call(
+        Call * call = new Call(
             std::forward<Func>(func), std::forward<Args>(args)...);
         unsigned id_receiver;
         auto int_handle = _beginthreadex(NULL, 0, threadfunc<Call>,
@@ -186,10 +189,15 @@ public:
         if (int_handle == 0)
         {
             mHandle = kInvalidHandle;
+//  Note: Should only throw EINVAL, EAGAIN, EACCES
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+            delete call;
+            std::abort();
+#else
             int errnum = errno;
             delete call;
-//  Note: Should only throw EINVAL, EAGAIN, EACCES
             throw std::system_error(errnum, std::generic_category());
+#endif
         } else {
             mThreadId.mId = id_receiver;
             mHandle = reinterpret_cast<HANDLE>(int_handle);
@@ -206,11 +214,23 @@ public:
     {
         using namespace std;
         if (get_id() == id(GetCurrentThreadId()))
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+            std::abort();
+#else
             throw system_error(make_error_code(errc::resource_deadlock_would_occur));
+#endif
         if (mHandle == kInvalidHandle)
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+            std::abort();
+#else
             throw system_error(make_error_code(errc::no_such_process));
+#endif
         if (!joinable())
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+            std::abort();
+#else
             throw system_error(make_error_code(errc::invalid_argument));
+#endif
         WaitForSingleObject(mHandle, kInfinite);
         CloseHandle(mHandle);
         mHandle = kInvalidHandle;
@@ -258,8 +278,12 @@ moving another thread to it.\n");
     {
         if (!joinable())
         {
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+            std::abort();
+#else
             using namespace std;
             throw system_error(make_error_code(errc::invalid_argument));
+#endif
         }
         if (mHandle != kInvalidHandle)
         {
@@ -288,7 +312,10 @@ namespace this_thread
     {
         return detail::ThreadIdTool::make_id(GetCurrentThreadId());
     }
-    inline void yield() noexcept {Sleep(0);}
+    inline void yield() noexcept
+    {
+        SwitchToThread();
+    }
     template< class Rep, class Period >
     void sleep_for( const std::chrono::duration<Rep,Period>& sleep_duration)
     {
@@ -307,7 +334,13 @@ namespace this_thread
     template <class Clock, class Duration>
     void sleep_until(const std::chrono::time_point<Clock,Duration>& sleep_time)
     {
-        sleep_for(sleep_time-Clock::now());
+        using time_point = std::chrono::time_point<Clock,Duration>;
+        time_point time_now = Clock::now();
+        while (time_now < sleep_time)
+        {
+            sleep_for(sleep_time-time_now);
+            time_now = Clock::now();
+        }
     }
 }
 } //  Namespace mingw_stdthread

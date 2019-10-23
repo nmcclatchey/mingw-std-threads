@@ -41,6 +41,10 @@
 #include <chrono>
 #include <limits>
 
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+#include <cstdlib>      //  For std::abort, if -fno-exceptions set.
+#endif
+
 //    Use MinGW's shared_lock class template, if it's available. Requires C++14.
 //  If unavailable (eg. because this library is being used in C++11), then an
 //  implementation of shared_lock is provided by this header.
@@ -125,7 +129,7 @@ public:
     void unlock_shared (void)
     {
         using namespace std;
-#ifndef NDEBUG
+#if !defined(NDEBUG) && !defined(MINGW_STDTHREAD_DISABLE_EXCEPTIONS)
         if (!(mCounter.fetch_sub(1, memory_order_release) & static_cast<counter_type>(~kWriteBit)))
             throw system_error(make_error_code(errc::operation_not_permitted));
 #else
@@ -178,7 +182,7 @@ public:
         mOwnerThread.checkSetOwnerBeforeUnlock();
 #endif
         using namespace std;
-#ifndef NDEBUG
+#if !defined(NDEBUG) && !defined(MINGW_STDTHREAD_DISABLE_EXCEPTIONS)
         if (mCounter.load(memory_order_relaxed) != kWriteBit)
             throw system_error(make_error_code(errc::operation_not_permitted));
 #endif
@@ -310,9 +314,17 @@ class shared_lock
     {
         using namespace std;
         if (mMutex == nullptr)
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+            std::abort();
+#else
             throw system_error(make_error_code(errc::operation_not_permitted));
+#endif
         if (mOwns)
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+            std::abort();
+#else
             throw system_error(make_error_code(errc::resource_deadlock_would_occur));
+#endif
     }
 public:
     typedef Mutex mutex_type;
@@ -425,7 +437,11 @@ public:
     {
         using namespace std;
         if (!mOwns)
+#ifdef MINGW_STDTHREAD_DISABLE_EXCEPTIONS
+            std::abort();
+#else
             throw system_error(make_error_code(errc::operation_not_permitted));
+#endif
         mMutex->unlock_shared();
         mOwns = false;
     }
