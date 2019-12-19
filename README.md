@@ -1,6 +1,8 @@
 mingw-std-threads
 =================
 
+[![Build Status](https://travis-ci.org/nmcclatchey/mingw-std-threads.svg?branch=thread-copy-args)](https://travis-ci.org/nmcclatchey/mingw-std-threads)
+
 Implementation of standard C++11 threading classes, which are currently still missing on MinGW GCC.
 
 Target Windows version
